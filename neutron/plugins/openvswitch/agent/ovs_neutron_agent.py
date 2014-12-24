@@ -275,6 +275,7 @@ class OVSNeutronAgent(n_rpc.RpcCallback,
         self.endpoints = [self]
         # Define the listening consumers for the agent
         consumers = [[topics.PORT, topics.UPDATE],
+                     [topics.PORT, topics.DELETE],
                      [topics.NETWORK, topics.DELETE],
                      [constants.TUNNEL, topics.UPDATE],
                      [topics.SECURITY_GROUP, topics.UPDATE],
@@ -315,6 +316,13 @@ class OVSNeutronAgent(n_rpc.RpcCallback,
         # are processed in the same order as the relevant API requests
         self.updated_ports.add(port['id'])
         LOG.debug(_("port_update message processed for port %s"), port['id'])
+
+    def port_delete(self, context, **kwargs):
+        port_id = kwargs.get('port_id')
+        port = self.int_br.get_vif_port_by_id(port_id)
+        # If port exists, delete it
+        if port:
+            self.int_br.delete_port(port.port_name)
 
     def tunnel_update(self, context, **kwargs):
         LOG.debug(_("tunnel_update received"))
