@@ -267,11 +267,18 @@ class IptablesMeteringDriver(abstract_driver.MeteringAbstractDriver):
                 continue
 
             for label_id, label in rm.metering_labels.items():
-                chain = iptables_manager.get_chain_name(WRAP_NAME + LABEL +
-                                                        label_id, wrap=False)
+                try:
+                    chain = iptables_manager.get_chain_name(WRAP_NAME +
+                                                            LABEL +
+                                                            label_id,
+                                                            wrap=False)
 
-                chain_acc = rm.iptables_manager.get_traffic_counters(
-                    chain, wrap=False, zero=True)
+                    chain_acc = rm.iptables_manager.get_traffic_counters(
+                        chain, wrap=False, zero=True)
+                except RuntimeError:
+                    LOG.exception(_('Failed to get traffic counters, '
+                                    'router: %s'), router)
+                    continue
 
                 if not chain_acc:
                     continue
