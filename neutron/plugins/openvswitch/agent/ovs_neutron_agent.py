@@ -199,6 +199,8 @@ class OVSNeutronAgent(n_rpc.RpcCallback,
         self.setup_integration_br()
         # Stores port update notifications for processing in main rpc loop
         self.updated_ports = set()
+        # Stores port delete notifications
+        self.deleted_ports = set()
         self.setup_rpc()
         self.bridge_mappings = bridge_mappings
         self.setup_physical_bridges(self.bridge_mappings)
@@ -319,10 +321,21 @@ class OVSNeutronAgent(n_rpc.RpcCallback,
 
     def port_delete(self, context, **kwargs):
         port_id = kwargs.get('port_id')
-        port = self.int_br.get_vif_port_by_id(port_id)
-        # If port exists, delete it
-        if port:
-            self.int_br.delete_port(port.port_name)
+        self.deleted_ports.add(port_id)
+        LOG.debug("port_delete message processed for port %s", port_id)
+
+    def process_deleted_ports(self):
+        while self.deleted_ports:
+            port_id = self.deleted_ports.pop()
+            # Flush firewall rules and move to dead VLAN so deleted ports no
+            # longer have access to the network
+            self.sg_agent.remove_devices_filter([port_id])
+            port = self.int_br.get_vif_port_by_id(port_id)
+            if port:
+                # don't log errors since there is a chance someone will be
+                # removing the port from the bridge at the same time
+                self.port_dead(port)
+            self.port_unbound(port_id)
 
     def tunnel_update(self, context, **kwargs):
         LOG.debug(_("tunnel_update received"))
@@ -1397,6 +1410,10 @@ class OVSNeutronAgent(n_rpc.RpcCallback,
                     self.updated_ports = set()
                     reg_ports = (set() if ovs_restarted else ports)
                     port_info = self.scan_ports(reg_ports, updated_ports_copy)
+                    # don't try to process removed ports as deleted ports since
+                    # they are already gone
+                    self.deleted_ports -= port_info['removed']
+                    self.process_deleted_ports()
                     LOG.debug(_("Agent rpc_loop - iteration:%(iter_num)d - "
                                 "port information retrieved. "
                                 "Elapsed:%(elapsed).3f"),
