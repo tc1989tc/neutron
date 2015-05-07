@@ -1,10 +1,9 @@
 # Configuration for {{vpnservice.name}}
 config setup
-    nat_traversal=yes
     listen={{vpnservice.external_ip}}
 conn %default
     ikelifetime=480m
-    keylife=60m
+    salifetime=60m
     keyingtries=%forever
 {% for ipsec_site_connection in vpnservice.ipsec_site_connections if ipsec_site_connection.admin_state_up
 %}conn {{ipsec_site_connection.id}}
@@ -16,7 +15,6 @@ conn %default
     # [subnet]
     leftsubnet={{vpnservice.subnet.cidr}}
     # leftsubnet=networkA/netmaskA, networkB/netmaskB (IKEv2 only)
-    leftnexthop=%defaultroute
     ######################
     # ipsec_site_connections
     ######################
@@ -27,7 +25,6 @@ conn %default
     # [peer_cidrs]
     rightsubnets={ {{ipsec_site_connection['peer_cidrs']|join(' ')}} }
     # rightsubnet=networkA/netmaskA, networkB/netmaskB (IKEv2 only)
-    rightnexthop=%defaultroute
     # [mtu]
     # Note It looks like not supported in the strongswan driver
     # ignore it now
@@ -59,6 +56,6 @@ conn %default
     # [encapsulation_mode]
     type={{ipsec_site_connection.ipsecpolicy.encapsulation_mode}}
     # [lifetime_value]
-    lifetime={{ipsec_site_connection.ipsecpolicy.lifetime_value}}s
+    salifetime={{ipsec_site_connection.ipsecpolicy.lifetime_value}}s
     # lifebytes=100000 if lifetime_units=kilobytes (IKEv2 only)
 {% endfor %}

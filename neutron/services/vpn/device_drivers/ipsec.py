@@ -378,7 +378,6 @@ class OpenSwanProcess(BaseSwanProcess):
                        'pluto',
                        '--ctlbase', self.pid_path,
                        '--ipsecdir', self.etc_dir,
-                       '--use-netkey',
                        '--uniqueids',
                        '--nat_traversal',
                        '--secretsfile', self.secrets_file,
@@ -386,11 +385,9 @@ class OpenSwanProcess(BaseSwanProcess):
                        ])
         #add connections
         for ipsec_site_conn in self.vpnservice['ipsec_site_connections']:
-            nexthop = self._get_nexthop(ipsec_site_conn['peer_address'])
             self._execute([self.binary,
                            'addconn',
                            '--ctlbase', '%s.ctl' % self.pid_path,
-                           '--defaultroutenexthop', nexthop,
                            '--config', self.config_file,
                            ipsec_site_conn['id']
                            ])
