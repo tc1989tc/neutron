@@ -306,12 +306,13 @@ class OpenSwanProcess(BaseSwanProcess):
         self.pid_path = os.path.join(
             self.config_dir, 'var', 'run', 'pluto') + os.sep
 
-    def _execute(self, cmd, check_exit_code=True):
+    def _execute(self, cmd, check_exit_code=True, addl_env={}):
         """Execute command on namespace."""
         ip_wrapper = ip_lib.IPWrapper(self.root_helper, self.namespace)
         return ip_wrapper.netns.execute(
             cmd,
-            check_exit_code=check_exit_code)
+            check_exit_code=check_exit_code,
+            addl_env=addl_env)
 
     def ensure_configs(self):
         """Generate config files which are needed for OpenSwan.
@@ -364,12 +365,20 @@ class OpenSwanProcess(BaseSwanProcess):
             virtual_privates.append('%%v%s:%s' % (version, net))
         return ','.join(virtual_privates)
 
+    def start_pre(self):
+        addl_env = {'IPSEC_CONF': self.config_file}
+        self._execute([self.binary, '_stackmanager', 'start'],
+                      check_exit_code=False, addl_env=addl_env)
+        self._execute([self.binary, '--checknss', self.etc_dir],
+                      check_exit_code=False, addl_env=addl_env)
+
     def start(self):
         """Start the process.
 
         Note: if there is not namespace yet,
         just do nothing, and wait next event.
         """
+        self.start_pre()
         if not self.namespace:
             return
         virtual_private = self._virtual_privates()
