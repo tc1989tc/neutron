@@ -304,14 +304,15 @@ class OpenSwanProcess(BaseSwanProcess):
         self.config_file = os.path.join(
             self.etc_dir, 'ipsec.conf')
         self.pid_path = os.path.join(
-            self.config_dir, 'var', 'run', 'pluto')
+            self.config_dir, 'var', 'run', 'pluto') + os.sep
 
-    def _execute(self, cmd, check_exit_code=True):
+    def _execute(self, cmd, check_exit_code=True, addl_env={}):
         """Execute command on namespace."""
         ip_wrapper = ip_lib.IPWrapper(self.root_helper, self.namespace)
         return ip_wrapper.netns.execute(
             cmd,
-            check_exit_code=check_exit_code)
+            check_exit_code=check_exit_code,
+            addl_env=addl_env)
 
     def ensure_configs(self):
         """Generate config files which are needed for OpenSwan.
@@ -364,12 +365,20 @@ class OpenSwanProcess(BaseSwanProcess):
             virtual_privates.append('%%v%s:%s' % (version, net))
         return ','.join(virtual_privates)
 
+    def start_pre(self):
+        addl_env = {'IPSEC_CONF': self.config_file}
+        self._execute([self.binary, '_stackmanager', 'start'],
+                      check_exit_code=False, addl_env=addl_env)
+        self._execute([self.binary, '--checknss', self.etc_dir],
+                      check_exit_code=False, addl_env=addl_env)
+
     def start(self):
         """Start the process.
 
         Note: if there is not namespace yet,
         just do nothing, and wait next event.
         """
+        self.start_pre()
         if not self.namespace:
             return
         virtual_private = self._virtual_privates()
@@ -378,7 +387,6 @@ class OpenSwanProcess(BaseSwanProcess):
                        'pluto',
                        '--ctlbase', self.pid_path,
                        '--ipsecdir', self.etc_dir,
-                       '--use-netkey',
                        '--uniqueids',
                        '--nat_traversal',
                        '--secretsfile', self.secrets_file,
@@ -386,11 +394,9 @@ class OpenSwanProcess(BaseSwanProcess):
                        ])
         #add connections
         for ipsec_site_conn in self.vpnservice['ipsec_site_connections']:
-            nexthop = self._get_nexthop(ipsec_site_conn['peer_address'])
             self._execute([self.binary,
                            'addconn',
                            '--ctlbase', '%s.ctl' % self.pid_path,
-                           '--defaultroutenexthop', nexthop,
                            '--config', self.config_file,
                            ipsec_site_conn['id']
                            ])
