@@ -103,18 +103,20 @@ class L3_NAT_with_dvr_db_mixin(l3_db.L3_NAT_db_mixin,
                 context, router_id, router_db, data, gw_info)
             return router_db
 
-    def _delete_current_gw_port(self, context, router_id, router, new_network):
+    def _delete_current_gw_port(self, context, router_id, router, new_network,
+                                ext_ip_change):
         super(L3_NAT_with_dvr_db_mixin,
               self)._delete_current_gw_port(context, router_id,
-                                            router, new_network)
+                                            router, new_network, ext_ip_change)
         if router.extra_attributes.distributed:
             self.delete_csnat_router_interface_ports(
                 context.elevated(), router)
 
-    def _create_gw_port(self, context, router_id, router, new_network):
+    def _create_gw_port(self, context, router_id, router, new_network, ext_ips,
+                        ext_ip_change):
         super(L3_NAT_with_dvr_db_mixin,
-              self)._create_gw_port(context, router_id,
-                                    router, new_network)
+              self)._create_gw_port(context, router_id, router, new_network,
+                                    ext_ips, ext_ip_change)
         if router.extra_attributes.distributed and router.gw_port:
             snat_p_list = self.create_snat_intf_ports_if_not_exists(
                 context.elevated(), router)
