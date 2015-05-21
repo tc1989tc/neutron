@@ -11,3 +11,4 @@
 ip: IpFilter, ip, root
 ip_exec: IpNetnsExecFilter, ip, root
 openswan: CommandFilter, ipsec, root
+ipsec: EnvFilter, env, root, IPSEC_CONF=, ipsec
