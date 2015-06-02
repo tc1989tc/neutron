@@ -324,7 +324,11 @@ class OVSNeutronAgent(n_rpc.RpcCallback,
         self.deleted_ports.add(port_id)
         LOG.debug("port_delete message processed for port %s", port_id)
 
-    def process_deleted_ports(self):
+    def process_deleted_ports(self, port_info):
+        # don't try to process removed ports as deleted ports since
+        # they are already gone
+        if 'removed' in port_info:
+            self.deleted_ports -= port_info['removed']
         while self.deleted_ports:
             port_id = self.deleted_ports.pop()
             # Flush firewall rules and move to dead VLAN so deleted ports no
@@ -1410,10 +1414,7 @@ class OVSNeutronAgent(n_rpc.RpcCallback,
                     self.updated_ports = set()
                     reg_ports = (set() if ovs_restarted else ports)
                     port_info = self.scan_ports(reg_ports, updated_ports_copy)
-                    # don't try to process removed ports as deleted ports since
-                    # they are already gone
-                    self.deleted_ports -= port_info['removed']
-                    self.process_deleted_ports()
+                    self.process_deleted_ports(port_info)
                     LOG.debug(_("Agent rpc_loop - iteration:%(iter_num)d - "
                                 "port information retrieved. "
                                 "Elapsed:%(elapsed).3f"),
