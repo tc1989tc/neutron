@@ -91,7 +91,7 @@ class QosFilter(model_base.BASEV2, models_v2.HasId, models_v2.HasTenant):
                        nullable=False)
     queue_id = sa.Column(sa.String(36),
                          sa.ForeignKey('eayun_qosqueues.id'))
-    prio = sa.Column(sa.Integer, nullable=False, unique=True)
+    prio = sa.Column(sa.Integer, nullable=False)
     protocol = sa.Column(sa.Integer)
     src_port = sa.Column(sa.Integer)
     dst_port = sa.Column(sa.Integer)
@@ -377,7 +377,6 @@ class QosDbMixin(ext_qos.QosPluginBase, base_db.CommonDbMixin):
         qos_queue = qos_queue['qos_queue']
 
         qos_db = self._get_qos(context, qos_queue['qos_id'])
-        self._check_qos_rate(qos_db, qos_queue['rate'])
         if qos_queue['parent_id'] is not None:
             parent_queue_db = self._get_qos_queue(context,
                                                   qos_queue['parent_id'])
@@ -385,6 +384,8 @@ class QosDbMixin(ext_qos.QosPluginBase, base_db.CommonDbMixin):
                 raise ext_qos.QosParentQueueInUse(parent_id=parent_queue_db.id)
             self._check_queue_in_qos(qos_db.id, parent_queue_db)
             self._check_qos_queue_rate(parent_queue_db, qos_queue['rate'])
+        else:
+            self._check_qos_rate(qos_db, qos_queue['rate'])
         tenant_id = self._get_tenant_id_for_create(context, qos_queue)
         qos_queue_id = qos_queue.get('id') or uuidutils.generate_uuid()
         with context.session.begin(subtransactions=True):
@@ -409,10 +410,11 @@ class QosDbMixin(ext_qos.QosPluginBase, base_db.CommonDbMixin):
                     qos_queue_id=id)
             new_rate = qos_queue.get('rate', qos_queue_db.rate)
             rate_delta = new_rate - qos_queue_db.rate
-            self._check_qos_rate(qos_queue_db.qos, rate_delta)
             if qos_queue_db.parent_queue:
                 self._check_qos_queue_rate(qos_queue_db.parent_queue,
                                            rate_delta)
+            else:
+                self._check_qos_rate(qos_queue_db.qos, rate_delta)
             if qos_queue_db.subqueues:
                 new_rate = qos_queue.get('rate', qos_queue_db.rate)
                 self._check_qos_queue_rate(qos_queue_db, 0, new_rate)
@@ -469,6 +471,9 @@ class QosDbMixin(ext_qos.QosPluginBase, base_db.CommonDbMixin):
 
         return self._fields(res, fields)
 
+    def _same_prio_filter_in_qos(self, qos, prio):
+        return prio in map(lambda f: f.prio, qos.filters)
+
     def create_qos_filter_bulk(self, context, qos_filter):
         return self._create_bulk('qos_filter', context, qos_filter)
 
@@ -481,6 +486,8 @@ class QosDbMixin(ext_qos.QosPluginBase, base_db.CommonDbMixin):
             self._check_queue_in_qos(qos_db.id, qos_queue_db)
             if qos_queue_db.subqueues:
                 raise ext_qos.QosQueueHasSub(qos_queue_id=qos_queue_db.id)
+        if self._same_prio_filter_in_qos(qos_db, qos_filter['prio']):
+            raise ext_qos.QosDuplicateFilterPrioValue(prio=qos_filter['prio'])
         tenant_id = self._get_tenant_id_for_create(context, qos_filter)
         qos_filter_id = qos_filter.get('id') or uuidutils.generate_uuid()
         with context.session.begin(subtransactions=True):
@@ -500,6 +507,7 @@ class QosDbMixin(ext_qos.QosPluginBase, base_db.CommonDbMixin):
 
     def update_qos_filter(self, context, id, qos_filter):
         qos_filter = qos_filter['qos_filter']
+        new_prio = qos_filter.get('prio', None)
 
         with context.session.begin(subtransactions=True):
             qos_filter_db = self._get_qos_filter(context, id)
@@ -509,6 +517,9 @@ class QosDbMixin(ext_qos.QosPluginBase, base_db.CommonDbMixin):
                 self._check_queue_in_qos(qos_filter_db.qos_id, qos_queue_db)
                 if qos_queue_db.subqueues:
                     raise ext_qos.QosQueueHasSub(qos_queue_id=qos_queue_db.id)
+            if new_prio is not None and new_prio != qos_filter_db.prio:
+                if self._same_prio_filter_in_qos(qos_filter_db.qos, new_prio):
+                    raise ext_qos.QosDuplicateFilterPrioValue(prio=new_prio)
             qos_filter_db.update(qos_filter)
         return self._make_qos_filter_dict(qos_filter_db)
 
