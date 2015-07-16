@@ -920,6 +920,26 @@ class L3_NAT_dbonly_mixin(l3.RouterPluginBase):
         return self._get_collection_count(context, FloatingIP,
                                           filters=filters)
 
+    def create_portmapping(self, context, portmapping):
+        return portmapping['portmapping']
+
+    def update_portmapping(self, context, id, portmapping):
+        return portmapping['portmapping']
+
+    def get_portmapping(self, context, id, fields=None):
+        return {"id": id, "name": "get_portmapping"}
+
+    def delete_portmapping(self, context, id):
+        return
+
+    def get_portmappings(self, context, filters=None, fields=None,
+                         sorts=None, limit=None, marker=None,
+                         page_reverse=False):
+        return [{"id": "id1", "name": "name1"}, {"id": "id2", "name": "name2"}]
+
+    def get_portmappings_count(self, context, filters=None):
+        return 1
+
     def prevent_l3_port_deletion(self, context, port_id):
         """Checks to make sure a port is allowed to be deleted.
 
