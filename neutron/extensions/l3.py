@@ -77,6 +77,15 @@ class RouterExternalGatewayInUseByFloatingIp(qexception.InUse):
                 "more floating IPs.")
 
 
+class RouterNotOwnedByTenant(qexception.Conflict):
+    message = _("The following router %(router_id)s is not owned by your "
+                "tenant.")
+
+
+class PortMappingNotFound(qexception.NotFound):
+    message = _("Portmapping %(portmapping_id)s could not be found.")
+
+
 class PortmappingInvalidProtocol(qexception.InvalidInput):
     message = _("Portmapping protocol %(protocol)s is not supported. "
                 "Only protocol values %(values)s are supported.")
