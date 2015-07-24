@@ -984,7 +984,7 @@ class L3_NAT_dbonly_mixin(l3.RouterPluginBase):
 
         return self._make_portmapping_dict(portmapping_db)
 
-    def update_portmapping(self, context, id, portmapping):
+    def _update_portmapping(self, context, id, portmapping):
         portmapping = portmapping['portmapping']
         portmapping_db = self._get_portmapping(context, id)
         admin_state_changed = (
@@ -995,14 +995,24 @@ class L3_NAT_dbonly_mixin(l3.RouterPluginBase):
         return (admin_state_changed,
                 self._make_portmapping_dict(portmapping_db))
 
+    def update_portmapping(self, context, id, portmapping):
+        admin_state_changed, portmapping = self._update_portmapping(
+            context, id, portmapping)
+        return portmapping
+
     def get_portmapping(self, context, id, fields=None):
         portmapping = self._get_portmapping(context, id)
         return self._make_portmapping_dict(portmapping, fields)
 
-    def delete_portmapping(self, context, id):
+    def _delete_portmapping(self, context, id):
         portmapping = self._get_portmapping(context, id)
+        router_id = portmapping['router_id']
         with context.session.begin(subtransactions=True):
             context.session.delete(portmapping)
+        return router_id
+
+    def delete_portmapping(self, context, id):
+        self._delete_portmapping(context, id)
 
     def get_portmappings(self, context, filters=None, fields=None,
                          sorts=None, limit=None, marker=None,
@@ -1339,6 +1349,26 @@ class L3_NAT_db_mixin(L3_NAT_dbonly_mixin, L3RpcNotifierMixin):
             return
 
         return router_ids
+
+    def create_portmapping(self, context, portmapping):
+        portmapping = super(
+            L3_NAT_db_mixin, self).create_portmapping(context, portmapping)
+        self.notify_router_updated(
+            context, portmapping['router_id'], 'create_portmapping', {})
+        return portmapping
+
+    def update_portmapping(self, context, id, portmapping):
+        admin_state_changed, portmapping = self._update_portmapping(
+            context, id, portmapping)
+        if admin_state_changed:
+            self.notify_router_updated(
+                context, portmapping['router_id'], 'update_portmapping', {})
+        return portmapping
+
+    def delete_portmapping(self, context, id):
+        router_id = self._delete_portmapping(context, id)
+        self.notify_router_updated(
+            context, router_id, 'delete_portmapping', {})
 
     def notify_routers_updated(self, context, router_ids):
         super(L3_NAT_db_mixin, self).notify_routers_updated(
