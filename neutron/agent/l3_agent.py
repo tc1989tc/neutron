@@ -123,6 +123,13 @@ class L3PluginApi(n_rpc.RpcProxy):
                                        fip_statuses=fip_statuses),
                          version='1.1')
 
+    def update_portmapping_statuses(self, context, pm_statuses):
+        """Call the plugin update portmappings' operational statuses."""
+        return self.call(context,
+                         self.make_msg('update_portmapping_statuses',
+                                       pm_statuses=pm_statuses),
+                         version='1.1')
+
     def get_ports_by_subnet(self, context, subnet_id):
         """Retrieve ports by subnet id."""
         return self.call(context,

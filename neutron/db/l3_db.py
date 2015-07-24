@@ -973,7 +973,7 @@ class L3_NAT_dbonly_mixin(l3.RouterPluginBase):
                 id=portmapping_id,
                 tenant_id=tenant_id,
                 name=portmapping['name'],
-                status='DOWN',  # TODO
+                status=l3_constants.PORTMAPPING_STATUS_DOWN,
                 admin_state_up=portmapping['admin_state_up'],
                 protocol=portmapping['protocol'],
                 router_id=portmapping['router_id'],
@@ -999,6 +999,12 @@ class L3_NAT_dbonly_mixin(l3.RouterPluginBase):
         admin_state_changed, portmapping = self._update_portmapping(
             context, id, portmapping)
         return portmapping
+
+    def update_portmapping_status(self, context, pm_id, status):
+        """Update operational status for portmapping in neutron DB."""
+        pm_query = self._model_query(context, PortMapping).filter(
+            PortMapping.id == pm_id)
+        pm_query.update({'status': status}, synchronize_session=False)
 
     def get_portmapping(self, context, id, fields=None):
         portmapping = self._get_portmapping(context, id)
