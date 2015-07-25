@@ -968,6 +968,15 @@ class L3_NAT_dbonly_mixin(l3.RouterPluginBase):
         router = self._get_router(context, portmapping['router_id'])
         if tenant_id != tenant_id:
             raise l3.RouterNotOwnedByTenant(router_id=router.id)
+        if self.get_portmappings(
+            context, {'protocol': [portmapping['protocol']],
+                      'router_id': [portmapping['router_id']],
+                      'router_port': [portmapping['router_port']]}
+        ):
+            raise l3.PortMappingAlreadyMapped(
+                protocol=portmapping['protocol'],
+                router_port=portmapping['router_port'],
+                router_id=portmapping['router_id'])
         with context.session.begin(subtransactions=True):
             portmapping_db = PortMapping(
                 id=portmapping_id,

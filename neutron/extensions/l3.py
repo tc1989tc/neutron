@@ -86,6 +86,11 @@ class PortMappingNotFound(qexception.NotFound):
     message = _("Portmapping %(portmapping_id)s could not be found.")
 
 
+class PortMappingAlreadyMapped(qexception.Conflict):
+    message = _("%(protocol)s port %(router_port)s of router %(router_id)s "
+                "has already been mapped.")
+
+
 class PortmappingInvalidProtocol(qexception.InvalidInput):
     message = _("Portmapping protocol %(protocol)s is not supported. "
                 "Only protocol values %(values)s are supported.")
