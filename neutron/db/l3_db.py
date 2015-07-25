@@ -1130,6 +1130,13 @@ class L3_NAT_dbonly_mixin(l3.RouterPluginBase):
             return []
         return self.get_floatingips(context, {'router_id': router_ids})
 
+    def _get_sync_portmappings(self, context, router_ids):
+        """Query portmappings that relate to list of router_ids."""
+        if not router_ids:
+            return []
+        return self.get_portmappings(
+            context, {'router_id': router_ids, 'admin_state_up': [True]})
+
     def get_sync_gw_ports(self, context, gw_port_ids):
         if not gw_port_ids:
             return []
@@ -1220,6 +1227,15 @@ class L3_NAT_dbonly_mixin(l3.RouterPluginBase):
                 router_interfaces.append(interface)
                 router[l3_constants.INTERFACE_KEY] = router_interfaces
 
+    def _process_portmappings(self, routers_dict, portmappings):
+        for portmapping in portmappings:
+            router = routers_dict.get(portmapping['router_id'])
+            if router:
+                router_portmappings = router.get(l3_constants.PORTMAPPING_KEY,
+                                                 [])
+                router_portmappings.append(portmapping)
+                router[l3_constants.PORTMAPPING_KEY] = router_portmappings
+
     def _get_router_info_list(self, context, router_ids=None, active=None,
                               device_owners=None):
         """Query routers and their related floating_ips, interfaces."""
@@ -1231,14 +1247,18 @@ class L3_NAT_dbonly_mixin(l3.RouterPluginBase):
             interfaces = self.get_sync_interfaces(
                 context, router_ids, device_owners)
             floating_ips = self._get_sync_floating_ips(context, router_ids)
-            return (routers, interfaces, floating_ips)
+            portmappings = self._get_sync_portmappings(context, router_ids)
+            return (routers, interfaces, floating_ips, portmappings)
 
     def get_sync_data(self, context, router_ids=None, active=None):
-        routers, interfaces, floating_ips = self._get_router_info_list(
+        (
+            routers, interfaces, floating_ips, portmappings
+        ) = self._get_router_info_list(
             context, router_ids=router_ids, active=active)
         routers_dict = dict((router['id'], router) for router in routers)
         self._process_floating_ips(context, routers_dict, floating_ips)
         self._process_interfaces(routers_dict, interfaces)
+        self._process_portmappings(routers_dict, portmappings)
         return routers_dict.values()
 
 

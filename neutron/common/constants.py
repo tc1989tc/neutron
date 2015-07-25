@@ -52,6 +52,7 @@ HA_ROUTER_STATE_KEY = '_ha_state'
 METERING_LABEL_KEY = '_metering_labels'
 FLOATINGIP_AGENT_INTF_KEY = '_floatingip_agent_interfaces'
 SNAT_ROUTER_INTF_KEY = '_snat_router_interfaces'
+PORTMAPPING_KEY = '_portmappings'
 
 HA_NETWORK_NAME = 'HA network tenant %s'
 HA_SUBNET_NAME = 'HA subnet tenant %s'
