@@ -429,6 +429,11 @@ class L3_NAT_dbonly_mixin(l3.RouterPluginBase):
             if vpnservice:
                 vpnservice.check_router_in_use(context, id)
 
+            fwservice = manager.NeutronManager.get_service_plugins().get(
+                constants.FIREWALL)
+            if fwservice:
+                fwservice.check_router_in_use(context, id)
+
             router_ports = router.attached_ports.all()
             # Set the router's gw_port to None to avoid a constraint violation.
             router.gw_port = None

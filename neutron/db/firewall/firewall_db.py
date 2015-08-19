@@ -90,6 +90,12 @@ class Firewall_db_mixin(firewall.FirewallPluginBase, base_db.CommonDbMixin):
     def _core_plugin(self):
         return manager.NeutronManager.get_plugin()
 
+    @classmethod
+    def register_dict_extend_funcs(cls, resource, funcs):
+        cur_funcs = cls._dict_extend_functions.get(resource, [])
+        cur_funcs.extend(funcs)
+        cls._dict_extend_functions[resource] = cur_funcs
+
     def _get_firewall(self, context, id):
         try:
             return self._get_by_id(context, Firewall, id)
@@ -108,7 +114,7 @@ class Firewall_db_mixin(firewall.FirewallPluginBase, base_db.CommonDbMixin):
         except exc.NoResultFound:
             raise firewall.FirewallRuleNotFound(firewall_rule_id=id)
 
-    def _make_firewall_dict(self, fw, fields=None):
+    def _make_firewall_dict(self, fw, fields=None, process_extensions=True):
         res = {'id': fw['id'],
                'tenant_id': fw['tenant_id'],
                'name': fw['name'],
@@ -117,6 +123,8 @@ class Firewall_db_mixin(firewall.FirewallPluginBase, base_db.CommonDbMixin):
                'admin_state_up': fw['admin_state_up'],
                'status': fw['status'],
                'firewall_policy_id': fw['firewall_policy_id']}
+        if process_extensions:
+            self._apply_dict_extend_functions(firewall.FIREWALLS, res, fw)
         return self._fields(res, fields)
 
     def _make_firewall_policy_dict(self, firewall_policy, fields=None):

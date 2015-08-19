@@ -19,8 +19,11 @@ from neutron.common import exceptions as n_exception
 from neutron.common import rpc as n_rpc
 from neutron.common import topics
 from neutron import context as neutron_context
+from neutron.api.v2 import attributes as attr
 from neutron.db.firewall import firewall_db
+from neutron.db.firewall import targetrouters_db
 from neutron.extensions import firewall as fw_ext
+from neutron.extensions.firewall_target_routers import FW_TARGET_ROUTERS
 from neutron.openstack.common import log as logging
 from neutron.plugins.common import constants as const
 
@@ -138,7 +141,8 @@ class FirewallCountExceeded(n_exception.Conflict):
                 "%(tenant_id)s. Only one firewall is supported per tenant.")
 
 
-class FirewallPlugin(firewall_db.Firewall_db_mixin):
+class FirewallPlugin(firewall_db.Firewall_db_mixin,
+                     targetrouters_db.FirewallTargetRoutersMixin):
 
     """Implementation of the Neutron Firewall Service Plugin.
 
@@ -146,7 +150,7 @@ class FirewallPlugin(firewall_db.Firewall_db_mixin):
     Most DB related works are implemented in class
     firewall_db.Firewall_db_mixin.
     """
-    supported_extension_aliases = ["fwaas"]
+    supported_extension_aliases = ["fwaas", "firewall-target-routers"]
 
     def __init__(self):
         """Do the initialization for the firewall service plugin here."""
@@ -220,7 +224,11 @@ class FirewallPlugin(firewall_db.Firewall_db_mixin):
                                             filters={'tenant_id': [tenant_id]})
         if fw_count:
             raise FirewallCountExceeded(tenant_id=tenant_id)
+        fw_target_routers = firewall['firewall'].pop(FW_TARGET_ROUTERS)
         fw = super(FirewallPlugin, self).create_firewall(context, firewall)
+        if attr.is_attr_set(fw_target_routers):
+            self._process_create_firewall_target_routers(
+                context, fw['id'], fw_target_routers)
         fw_with_rules = (
             self._make_firewall_dict_with_rules(context, fw['id']))
         self.agent_rpc.create_firewall(context, fw_with_rules)
@@ -230,7 +238,15 @@ class FirewallPlugin(firewall_db.Firewall_db_mixin):
         LOG.debug(_("update_firewall() called"))
         self._ensure_update_firewall(context, id)
         firewall['firewall']['status'] = const.PENDING_UPDATE
+        new_targets = firewall['firewall'].pop(FW_TARGET_ROUTERS)
         fw = super(FirewallPlugin, self).update_firewall(context, id, firewall)
+        if (
+            attr.is_attr_set(new_targets) and
+            new_targets != self._get_target_routers(context, id)
+        ):
+            self._delete_target_routers(context, id)
+            self._process_create_firewall_target_routers(
+                context, id, new_targets)
         fw_with_rules = (
             self._make_firewall_dict_with_rules(context, fw['id']))
         self.agent_rpc.update_firewall(context, fw_with_rules)
