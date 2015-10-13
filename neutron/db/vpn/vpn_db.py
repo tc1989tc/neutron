@@ -24,6 +24,7 @@ from neutron.db import l3_agentschedulers_db as l3_agent_db
 from neutron.db import l3_db
 from neutron.db import model_base
 from neutron.db import models_v2
+from neutron.db import servicetype_db as st_db
 from neutron.db.vpn import vpn_validator
 from neutron.extensions import vpnaas
 from neutron import manager
@@ -154,12 +155,19 @@ class VPNService(model_base.BASEV2, models_v2.HasId, models_v2.HasTenant):
         IPsecSiteConnection,
         backref='vpnservice',
         cascade="all, delete-orphan")
+    provider = orm.relationship(
+        st_db.ProviderResourceAssociation,
+        uselist=False,
+        lazy="joined",
+        primaryjoin="VPNService.id==ProviderResourceAssociation.resource_id",
+        foreign_keys=[st_db.ProviderResourceAssociation.resource_id]
+    )
 
 
 class VPNPluginDb(vpnaas.VPNPluginBase, base_db.CommonDbMixin):
     """VPN plugin database class using SQLAlchemy models."""
 
-    def _get_validator(self):
+    def _get_validator(self, provider=None):
         """Obtain validator to use for attribute validation.
 
         Subclasses may override this with a different valdiator, as needed.
@@ -234,9 +242,10 @@ class VPNPluginDb(vpnaas.VPNPluginBase, base_db.CommonDbMixin):
         ip_version = netaddr.IPNetwork(subnet).version
         return ip_version
 
-    def create_ipsec_site_connection(self, context, ipsec_site_connection):
+    def create_ipsec_site_connection(self, context, ipsec_site_connection,
+                                     validator=None):
         ipsec_sitecon = ipsec_site_connection['ipsec_site_connection']
-        validator = self._get_validator()
+        validator = validator or self._get_validator()
         validator.assign_sensible_ipsec_sitecon_defaults(ipsec_sitecon)
         tenant_id = self._get_tenant_id_for_create(context, ipsec_sitecon)
         with context.session.begin(subtransactions=True):
@@ -287,10 +296,10 @@ class VPNPluginDb(vpnaas.VPNPluginBase, base_db.CommonDbMixin):
 
     def update_ipsec_site_connection(
             self, context,
-            ipsec_site_conn_id, ipsec_site_connection):
+            ipsec_site_conn_id, ipsec_site_connection, validator=None):
         ipsec_sitecon = ipsec_site_connection['ipsec_site_connection']
         changed_peer_cidrs = False
-        validator = self._get_validator()
+        validator = validator or self._get_validator()
         with context.session.begin(subtransactions=True):
             ipsec_site_conn_db = self._get_resource(
                 context,
@@ -544,12 +553,14 @@ class VPNPluginDb(vpnaas.VPNPluginBase, base_db.CommonDbMixin):
                'router_id': vpnservice['router_id'],
                'admin_state_up': vpnservice['admin_state_up'],
                'status': vpnservice['status']}
+        if vpnservice.provider:
+            res['provider'] = vpnservice.provider.provider_name
         return self._fields(res, fields)
 
-    def create_vpnservice(self, context, vpnservice):
+    def create_vpnservice(self, context, vpnservice, validator=None):
         vpns = vpnservice['vpnservice']
         tenant_id = self._get_tenant_id_for_create(context, vpns)
-        validator = self._get_validator()
+        validator = validator or self._get_validator()
         with context.session.begin(subtransactions=True):
             validator.validate_vpnservice(context, vpns)
             vpnservice_db = VPNService(id=uuidutils.generate_uuid(),
@@ -603,7 +614,7 @@ class VPNPluginDb(vpnaas.VPNPluginBase, base_db.CommonDbMixin):
 
 
 class VPNPluginRpcDbMixin():
-    def _get_agent_hosting_vpn_services(self, context, host):
+    def _get_agent_hosting_vpn_services(self, context, host, provider):
 
         plugin = manager.NeutronManager.get_plugin()
         agent = plugin._get_agent_by_type_and_host(
@@ -611,6 +622,11 @@ class VPNPluginRpcDbMixin():
         if not agent.admin_state_up:
             return []
         query = context.session.query(VPNService)
+        query = query.join(
+            st_db.ProviderResourceAssociation,
+            st_db.ProviderResourceAssociation.provider_name == provider)
+        query = query.filter(
+            st_db.ProviderResourceAssociation.resource_id == VPNService.id)
         query = query.join(IPsecSiteConnection)
         query = query.join(IKEPolicy)
         query = query.join(IPsecPolicy)
