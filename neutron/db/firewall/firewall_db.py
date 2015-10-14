@@ -256,6 +256,14 @@ class Firewall_db_mixin(firewall.FirewallPluginBase, base_db.CommonDbMixin):
         else:
             return '%d:%d' % (min_port, max_port)
 
+    def _validate_fw_parameters(self, context, fw, fw_tenant_id):
+        if 'firewall_policy_id' not in fw:
+            return
+        fwp_id = fw['firewall_policy_id']
+        fwp = self._get_firewall_policy(context, fwp_id)
+        if fw_tenant_id != fwp['tenant_id'] and not fwp['shared']:
+            raise firewall.FirewallPolicyConflict(firewall_policy_id=fwp_id)
+
     def _validate_fwr_protocol_parameters(self, fwr):
         protocol = fwr['protocol']
         if protocol not in (const.TCP, const.UDP):
@@ -273,6 +281,7 @@ class Firewall_db_mixin(firewall.FirewallPluginBase, base_db.CommonDbMixin):
         status = (const.CREATED
             if cfg.CONF.router_distributed else const.PENDING_CREATE)
         with context.session.begin(subtransactions=True):
+            self._validate_fw_parameters(context, fw, tenant_id)
             firewall_db = Firewall(id=uuidutils.generate_uuid(),
                                    tenant_id=tenant_id,
                                    name=fw['name'],
@@ -288,6 +297,8 @@ class Firewall_db_mixin(firewall.FirewallPluginBase, base_db.CommonDbMixin):
         LOG.debug(_("update_firewall() called"))
         fw = firewall['firewall']
         with context.session.begin(subtransactions=True):
+            fw_db = self.get_firewall(context, id)
+            self._validate_fw_parameters(context, fw, fw_db['tenant_id'])
             count = context.session.query(Firewall).filter_by(id=id).update(fw)
             if not count:
                 raise firewall.FirewallNotFound(firewall_id=id)
@@ -383,7 +394,7 @@ class Firewall_db_mixin(firewall.FirewallPluginBase, base_db.CommonDbMixin):
         self._validate_fwr_protocol_parameters(fwr)
         tenant_id = self._get_tenant_id_for_create(context, fwr)
         if not fwr['protocol'] and (fwr['source_port'] or
-                fwr['destination_port']):
+           fwr['destination_port']):
             raise firewall.FirewallRuleWithPortWithoutProtocolInvalid()
         src_port_min, src_port_max = self._get_min_max_ports_from_range(
             fwr['source_port'])
