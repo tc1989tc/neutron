@@ -18,7 +18,9 @@ import sqlalchemy as sa
 from sqlalchemy import orm
 from sqlalchemy.orm import exc
 
+from neutron.api.v2 import attributes as attr
 from neutron.common import constants as n_constants
+from neutron.common import exceptions as n_exc
 from neutron.db import common_db_mixin as base_db
 from neutron.db import l3_agentschedulers_db as l3_agent_db
 from neutron.db import l3_db
@@ -164,8 +166,39 @@ class VPNService(model_base.BASEV2, models_v2.HasId, models_v2.HasTenant):
     )
 
 
+class PPTPCredential(model_base.BASEV2, models_v2.HasId, models_v2.HasTenant):
+    """Represents a PPTPCredential object."""
+    __tablename__ = 'pptp_credentials'
+    username = sa.Column(sa.String(255), nullable=False)
+    password = sa.Column(sa.String(255), nullable=False)
+
+
+class PPTPCredentialServiceAssociation(model_base.BASEV2):
+    """Many-to-many association between PPTP credential and VPN service."""
+    pptp_credential_id = sa.Column(
+        sa.String(36),
+        sa.ForeignKey('pptp_credentials.id', ondelete='CASCADE'),
+        primary_key=True)
+    vpnservice_id = sa.Column(
+        sa.String(36),
+        sa.ForeignKey('vpnservices.id', ondelete='CASCADE'),
+        primary_key=True)
+    port_id = sa.Column(
+        sa.String(36),
+        sa.ForeignKey('ports.id', ondelete='CASCADE'),
+        primary_key=True)
+    pptp_credentials = orm.relationship(
+        PPTPCredential,
+        backref=orm.backref('associations',
+                            lazy='joined', cascade='delete'))
+
+
 class VPNPluginDb(vpnaas.VPNPluginBase, base_db.CommonDbMixin):
     """VPN plugin database class using SQLAlchemy models."""
+
+    @property
+    def _core_plugin(self):
+        return manager.NeutronManager.get_plugin()
 
     def _get_validator(self, provider=None):
         """Obtain validator to use for attribute validation.
@@ -590,6 +623,12 @@ class VPNPluginDb(vpnaas.VPNPluginBase, base_db.CommonDbMixin):
             ).first():
                 raise vpnaas.VPNServiceInUse(vpnservice_id=vpnservice_id)
             vpns_db = self._get_resource(context, VPNService, vpnservice_id)
+            associations = context.session.query(
+                PPTPCredentialServiceAssociation
+            ).filter_by(vpnservice_id=vpnservice_id).all()
+            for association in associations:
+                self._core_plugin.delete_port(
+                    context, association.port_id, l3_port_check=False)
             context.session.delete(vpns_db)
 
     def _get_vpnservice(self, context, vpnservice_id):
@@ -611,6 +650,135 @@ class VPNPluginDb(vpnaas.VPNPluginBase, base_db.CommonDbMixin):
             raise vpnaas.RouterInUseByVPNService(
                 router_id=router_id,
                 vpnservice_id=vpnservices[0]['id'])
+
+    def _make_pptp_credential_dict(self, pptp_credential, fields=None):
+        res = {'id': pptp_credential['id'],
+               'tenant_id': pptp_credential['tenant_id'],
+               'username': pptp_credential['username'],
+               'password': pptp_credential['password'],
+               'vpnservices': [association.vpnservice_id for association in
+                               pptp_credential['associations']]}
+        return self._fields(res, fields)
+
+    def _username_already_exists(self, context, username):
+        query = self._model_query(context, PPTPCredential)
+        return len(query.filter_by(username=username).all()) > 0
+
+    def _create_port_for_vpnservice(self, context,
+                                    vpnservice_id, pptp_credential_id):
+        vpns_db = self._get_resource(context, VPNService, vpnservice_id)
+        subnet_id = vpns_db['subnet_id']
+        subnet = self._core_plugin._get_subnet(context, subnet_id)
+        port = {
+            'port': {
+                'tenant_id': subnet['tenant_id'],
+                'network_id': subnet['network_id'],
+                'fixed_ips': [{'subnet_id': subnet_id}],
+                'mac_address': attr.ATTR_NOT_SPECIFIED,
+                'admin_state_up': True,
+                'status': n_constants.PORT_STATUS_DOWN,
+                'device_id': vpnservice_id,
+                'device_owner': constants.VPN,
+                'name': pptp_credential_id
+            }
+        }
+        port = self._core_plugin.create_port(context, port)
+        if port['fixed_ips']:
+            return port['id']
+
+        # Port creation failed
+        self._core_plugin.delete_port(context, port['id'], l3_port_check=False)
+        return None
+
+    def create_pptp_credential(self, context, pptp_credential):
+        pptp_credential = pptp_credential['pptp_credential']
+        tenant_id = self._get_tenant_id_for_create(context, pptp_credential)
+        pptp_credential_id = uuidutils.generate_uuid()
+        with context.session.begin(subtransactions=True):
+            username = pptp_credential['username']
+            if self._username_already_exists(context, username):
+                raise vpnaas.PPTPUsernameAlreadyExists(username=username)
+            pptp_credential_db = PPTPCredential(
+                id=pptp_credential_id,
+                tenant_id=tenant_id,
+                username=username,
+                password=pptp_credential['password']
+            )
+            context.session.add(pptp_credential_db)
+            if attr.is_attr_set(pptp_credential['vpnservices']):
+                for vpnservice_id in pptp_credential['vpnservices']:
+                    port_id = self._create_port_for_vpnservice(
+                        context, vpnservice_id, pptp_credential_id)
+                    if not port_id:
+                        LOG.warn(
+                            _("Cannot create port for vpnservice "
+                              "%(vpnservice_id)s and pptp_credential "
+                              "%(pptp_credential_id)s."),
+                            {'vpnservice_id': vpnservice_id,
+                             'pptp_credential_id': pptp_credential_id})
+                        continue
+                    association = PPTPCredentialServiceAssociation(
+                        pptp_credential_id=pptp_credential_id,
+                        vpnservice_id=vpnservice_id,
+                        port_id=port_id
+                    )
+                    context.session.add(association)
+        return self._make_pptp_credential_dict(pptp_credential_db)
+
+    def update_pptp_credential(self, context, pptp_credential_id,
+                               pptp_credential):
+        pptp_credential = pptp_credential['pptp_credential']
+        vpnservices = pptp_credential.pop('vpnservices', None)
+        with context.session.begin(subtransactions=True):
+            pptp_credential_db = self._get_resource(
+                context, PPTPCredential, pptp_credential_id)
+            pptp_credential_db.update(pptp_credential)
+            if attr.is_attr_set(vpnservices):
+                new_services = set(vpnservices)
+                for association in pptp_credential_db['associations']:
+                    if association.vpnservice_id in new_services:
+                        new_services.remove(association.vpnservice_id)
+                    else:
+                        self._core_plugin.delete_port(
+                            context, association.port_id, l3_port_check=False)
+                        context.session.delete(association)
+                for service_id in new_services:
+                    port_id = self._create_port_for_vpnservice(
+                        context, service_id, pptp_credential_id)
+                    if not port_id:
+                        LOG.warn(
+                            _("Cannot create port for vpnservice "
+                              "%(vpnservice_id)s and pptp_credential "
+                              "%(pptp_credential_id)s."),
+                            {'vpnservice_id': service_id,
+                             'pptp_credential_id': pptp_credential_id})
+                        continue
+                    association = PPTPCredentialServiceAssociation(
+                        pptp_credential_id=pptp_credential_id,
+                        vpnservice_id=service_id,
+                        port_id=port_id
+                    )
+                    context.session.add(association)
+        return self._make_pptp_credential_dict(pptp_credential_db)
+
+    def delete_pptp_credential(self, context, pptp_credential_id):
+        with context.session.begin(subtransactions=True):
+            pptp_credential = self._get_resource(
+                context, PPTPCredential, pptp_credential_id)
+            for association in pptp_credential['associations']:
+                self._core_plugin.delete_port(
+                    context, association.port_id, l3_port_check=False)
+            context.session.delete(pptp_credential)
+
+    def get_pptp_credential(self, context, pptp_credential_id, fields=None):
+        pptp_credential = self._get_resource(
+            context, PPTPCredential, pptp_credential_id)
+        return self._make_pptp_credential_dict(pptp_credential, fields)
+
+    def get_pptp_credentials(self, context, filters=None, fields=None):
+        return self._get_collection(context, PPTPCredential,
+                                    self._make_pptp_credential_dict,
+                                    filters=filters, fields=fields)
 
 
 class VPNPluginRpcDbMixin():
