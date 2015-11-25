@@ -19,12 +19,16 @@ from neutron.common import exceptions as n_exc
 from neutron import context as n_context
 from neutron.db import servicetype_db as st_db
 from neutron.db.vpn import vpn_db
+from neutron.extensions import vpnaas as vpn_ext
 from neutron.openstack.common import log as logging
 from neutron.plugins.common import constants
 from neutron.services import provider_configuration as pconf
 from neutron.services import service_base
 
 LOG = logging.getLogger(__name__)
+
+IPSEC = 'ipsec'
+PPTP = 'pptp'
 
 
 class VPNPlugin(vpn_db.VPNPluginDb):
@@ -67,6 +71,26 @@ class VPNDriverPlugin(VPNPlugin, vpn_db.VPNPluginRpcDbMixin):
             context, resource['vpnservice_id'])
         provider_name = vpnservice['provider']
         return self.drivers[provider_name]
+
+    def _check_drivers_for_pptp_credential(self, context, pptp_credential):
+        providers = dict()
+        if (
+            'vpnservices' in pptp_credential and
+            attrs.is_attr_set(pptp_credential['vpnservices'])
+        ):
+            for vpnservice_id in pptp_credential['vpnservices']:
+                vpnservice = self.get_vpnservice(context, vpnservice_id)
+                provider = vpnservice['provider']
+                if provider in providers:
+                    providers[provider].append(vpnservice_id)
+                else:
+                    providers[provider] = [vpnservice_id]
+
+        for provider, vpnservice_ids in providers.iteritems():
+            driver = self.drivers[provider]
+            if not driver.service_type == PPTP:
+                raise vpn_ext.BadProviderForPPTP(
+                    vpnservice_ids=vpnservice_ids)
 
     def _check_orphan_vpnservice_associations(self, context, provider_names):
         """Ensure no orphaned providers for existing services.
@@ -146,6 +170,9 @@ class VPNDriverPlugin(VPNPlugin, vpn_db.VPNPluginRpcDbMixin):
     def create_ipsec_site_connection(self, context, ipsec_site_connection):
         driver = self._get_driver_for_ipsec_site_connection(
             context, ipsec_site_connection['ipsec_site_connection'])
+        if not driver.service_type == IPSEC:
+            raise vpn_ext.BadProviderForIPsec(
+                vpnservice_id=ipsec_site_connection['vpnservice_id'])
         validator = driver.validator
         ipsec_site_connection = super(
             VPNDriverPlugin, self).create_ipsec_site_connection(
@@ -180,3 +207,16 @@ class VPNDriverPlugin(VPNPlugin, vpn_db.VPNPluginRpcDbMixin):
         driver.update_ipsec_site_connection(
             context, old_ipsec_site_connection, ipsec_site_connection)
         return ipsec_site_connection
+
+    def create_pptp_credential(self, context, pptp_credential):
+        self._check_drivers_for_pptp_credential(context, pptp_credential)
+        return super(
+            VPNDriverPlugin, self
+        ).create_pptp_credential(context, pptp_credential)
+
+    def update_pptp_credential(self, context, pptp_credential_id,
+                               pptp_credential):
+        self._check_drivers_for_pptp_credential(context, pptp_credential)
+        return super(
+            VPNDriverPlugin, self
+        ).update_pptp_credential(context, pptp_credential_id, pptp_credential)

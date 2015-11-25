@@ -842,3 +842,142 @@ class VPNPluginRpcDbMixin():
                     self._update_connection_status(
                         context, conn_id, conn['status'],
                         conn['updated_pending_status'])
+
+    def set_vpnservice_status(self, context, vpnservice_id, status):
+        with context.session.begin(subtransactions=True):
+            try:
+                vpnservice_db = self._get_vpnservice(context, vpnservice_id)
+                vpnservice_db.status = status
+            except vpnaas.VPNServiceNotFound:
+                LOG.warn(_('vpnservice %s in db is already deleted'),
+                         vpnservice_db['id'])
+
+    def update_pptp_status_by_agent(
+            self, context, host,
+            pptp_processes_status, credentials, updated_ports,
+            provider):
+
+        notify_vpnservices = {
+            'enabled': [],
+            'disabled': [],
+            'deleted': [],
+            'added': []
+        }
+        notify_credentials = {
+            'added': [],
+            'deleted': [],
+            'updated': {}
+        }
+        notify_ports = {
+            'added': {},
+            'deleted': []
+        }
+
+        # First, get vpnservices running on the specified host
+        plugin = manager.NeutronManager.get_plugin()
+        agent = plugin._get_agent_by_type_and_host(
+            context, n_constants.AGENT_TYPE_L3, host)
+        vpnservices = {}
+        if agent.admin_state_up:
+            query = context.session.query(VPNService)
+            query = query.join(
+                st_db.ProviderResourceAssociation,
+                st_db.ProviderResourceAssociation.provider_name == provider)
+            query = query.filter(
+                st_db.ProviderResourceAssociation.resource_id == VPNService.id)
+            query = query.join(l3_agent_db.RouterL3AgentBinding,
+                               l3_agent_db.RouterL3AgentBinding.router_id ==
+                               VPNService.router_id)
+            query = query.filter(
+                l3_agent_db.RouterL3AgentBinding.l3_agent_id == agent.id)
+            for vpnservice in query.all():
+                vpnservices[vpnservice['id']] = self._make_vpnservice_dict(
+                    vpnservice)
+
+        # Second, obtain pptp_credentials and ports for the vpnservices
+        pptp_credentials = {}
+        ports = {}
+        for vpnservice_id in vpnservices.keys():
+            ports[vpnservice_id] = {}
+            for association in context.session.query(
+                PPTPCredentialServiceAssociation
+            ).filter_by(vpnservice_id=vpnservice_id).all():
+                if association.pptp_credential_id not in pptp_credentials:
+                    pptp_credential_db = self._get_resource(
+                        context, PPTPCredential,
+                        association.pptp_credential_id)
+                    pptp_credentials[association.pptp_credential_id] = {
+                        'id': pptp_credential_db['id'],
+                        'username': pptp_credential_db['username'],
+                        'password': pptp_credential_db['password']
+                    }
+                port_db = self._core_plugin._get_port(
+                    context, association.port_id
+                )
+                ports[vpnservice_id][association.port_id] = {
+                    'vpnservice_id': vpnservice_id,
+                    'ip': port_db.fixed_ips[0]['ip_address'],
+                    'credential_id': association.pptp_credential_id
+                }
+
+        with context.session.begin(subtransactions=True):
+            # Update port status
+            for port_id, status in updated_ports.iteritems():
+                try:
+                    port_db = self._core_plugin._get_port(context, port_id)
+                except n_exc.PortNotFound:
+                    LOG.warn(_('port %s in db is already deleted', port_id))
+                    continue
+                if status:
+                    port_db.status = n_constants.PORT_STATUS_ACTIVE
+                else:
+                    port_db.status = n_constants.PORT_STATUS_DOWN
+
+        # Update vpnservice status
+        for vpnservice_id, status in pptp_processes_status.iteritems():
+            if vpnservice_id not in vpnservices:
+                notify_vpnservices['deleted'].append(vpnservice_id)
+                continue
+            s = constants.ACTIVE if status['active'] else constants.DOWN
+            self.set_vpnservice_status(context, vpnservice_id, s)
+            vpnservice = vpnservices.pop(vpnservice_id)
+            # Sync vpnservice process status
+            if vpnservice['admin_state_up'] != status['enabled']:
+                notify_vpnservices[
+                    'enabled' if vpnservice['admin_state_up'] else 'disabled'
+                ].append(vpnservice_id)
+            for port_id in status['ports']:
+                if port_id not in ports[vpnservice_id]:
+                    notify_ports['deleted'].append(port_id)
+                    continue
+                ports[vpnservice_id].pop(port_id)
+
+        # Update pptp_credential status
+        for credential_id, credential in credentials.iteritems():
+            if credential_id not in pptp_credentials:
+                notify_credentials['deleted'].append(credential_id)
+                continue
+            c = pptp_credentials.pop(credential_id)
+            if c['password'] != credential['password']:
+                notify_credentials['updated'][credential_id] = c['password']
+
+        # Handle added vpnservices
+        for vpnservice_id, vpnservice in vpnservices.iteritems():
+            subnet = self._core_plugin.get_subnet(
+                context, vpnservice['subnet_id']
+            )
+            vpnservice['localip'] = subnet['gateway_ip']
+            notify_vpnservices['added'].append(vpnservice)
+
+        # Handle added credentials
+        for credential_id, credential in pptp_credentials.iteritems():
+            notify_credentials['added'].append(credential)
+
+        # Handle added ports
+        for vpnservice_id, ports in ports.iteritems():
+            notify_ports['added'].update(ports)
+
+        driver = self.drivers[provider]
+        driver.sync_from_server(
+            context, host, notify_vpnservices, notify_credentials, notify_ports
+        )
