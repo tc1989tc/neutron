@@ -15,6 +15,7 @@
 
 from neutron.agent.linux import iptables_manager
 from neutron.extensions import firewall as fw_ext
+from neutron.extensions.firewall_target_routers import FW_TARGET_ROUTERS
 from neutron.openstack.common import log as logging
 from neutron.services.firewall.drivers import fwaas_base
 
@@ -122,6 +123,7 @@ class IptablesFwaasDriver(fwaas_base.FwaasDriverBase):
         LOG.debug(_('Applying firewall %(fw_id)s for tenant %(tid)s)'),
                   {'fw_id': firewall['id'], 'tid': firewall['tenant_id']})
         fwid = firewall['id']
+        target_routers = firewall[FW_TARGET_ROUTERS]
         try:
             for router_info in apply_list:
                 ipt_if_prefix_list = self._get_ipt_mgrs_with_if_prefix(
@@ -132,9 +134,13 @@ class IptablesFwaasDriver(fwaas_base.FwaasDriverBase):
                     self._remove_chains(fwid, ipt_mgr)
                     self._remove_default_chains(ipt_mgr)
 
-                    # create default 'DROP ALL' policy chain
-                    self._add_default_policy_chain_v4v6(ipt_mgr)
-                    self._enable_policy_chain(fwid, ipt_if_prefix)
+                    if (
+                        not target_routers or
+                        router_info.router_id in target_routers
+                    ):
+                        # create default 'DROP ALL' policy chain
+                        self._add_default_policy_chain_v4v6(ipt_mgr)
+                        self._enable_policy_chain(fwid, ipt_if_prefix)
 
                     # apply the changes immediately (no defer in firewall path)
                     ipt_mgr.defer_apply_off()
@@ -146,6 +152,7 @@ class IptablesFwaasDriver(fwaas_base.FwaasDriverBase):
 
     def _setup_firewall(self, agent_mode, apply_list, firewall):
         fwid = firewall['id']
+        target_routers = firewall[FW_TARGET_ROUTERS]
         for router_info in apply_list:
             ipt_if_prefix_list = self._get_ipt_mgrs_with_if_prefix(
                 agent_mode, router_info)
@@ -155,10 +162,14 @@ class IptablesFwaasDriver(fwaas_base.FwaasDriverBase):
                 self._remove_chains(fwid, ipt_mgr)
                 self._remove_default_chains(ipt_mgr)
 
-                # create default 'DROP ALL' policy chain
-                self._add_default_policy_chain_v4v6(ipt_mgr)
-                #create chain based on configured policy
-                self._setup_chains(firewall, ipt_if_prefix)
+                if (
+                    not target_routers or
+                    router_info.router_id in target_routers
+                ):
+                    # create default 'DROP ALL' policy chain
+                    self._add_default_policy_chain_v4v6(ipt_mgr)
+                    #create chain based on configured policy
+                    self._setup_chains(firewall, ipt_if_prefix)
 
                 # apply the changes immediately (no defer in firewall path)
                 ipt_mgr.defer_apply_off()

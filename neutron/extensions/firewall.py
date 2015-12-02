@@ -211,6 +211,7 @@ def _validate_ip_or_subnet_or_none(data, valid_values=None):
 attr.validators['type:port_range'] = _validate_port_range
 attr.validators['type:ip_or_subnet_or_none'] = _validate_ip_or_subnet_or_none
 
+FIREWALLS = 'firewalls'
 
 RESOURCE_ATTRIBUTE_MAP = {
     'firewall_rules': {
