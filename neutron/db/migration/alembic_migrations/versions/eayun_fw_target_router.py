@@ -16,7 +16,7 @@
 """eayun_fw_target_router
 
 Revision ID: eayun_fw_target_router
-Revises: eayun_neutron_qos
+Revises: eayun_portmapping
 Create Date: 2015-08-19 14:00:00.000000
 
 """
@@ -27,7 +27,7 @@ from neutron.db.migration.alembic_migrations import (
 
 # revision identifiers, used by Alembic.
 revision = 'eayun_fw_target_router'
-down_revision = 'eayun_neutron_qos'
+down_revision = 'eayun_portmapping'
 
 
 def upgrade():
