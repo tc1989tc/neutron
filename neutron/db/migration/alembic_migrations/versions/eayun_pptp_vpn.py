@@ -16,7 +16,7 @@
 """eayun_pptp_vpn
 
 Revision ID: eayun_pptp_vpn
-Revises: eayun_neutron_qos
+Revises: eayun_neutron_qos_db_refine
 Create Date: 2015-10-26 18:00:00.000000
 
 """
@@ -25,7 +25,7 @@ from neutron.db.migration.alembic_migrations import eayun_pptp_vpn_init_ops
 
 # revision identifiers, used by Alembic.
 revision = 'eayun_pptp_vpn'
-down_revision = 'eayun_neutron_qos'
+down_revision = 'eayun_neutron_qos_db_refine'
 
 
 def upgrade():
