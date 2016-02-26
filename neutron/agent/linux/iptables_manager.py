@@ -50,6 +50,7 @@ MAX_CHAIN_LEN_NOWRAP = 28
 # a failure during iptables-restore
 IPTABLES_ERROR_LINES_OF_CONTEXT = 5
 
+NETNS_RUN_DIR = '/var/run/netns'
 
 def get_chain_name(chain_name, wrap=True):
     if wrap:
@@ -280,13 +281,19 @@ class IptablesManager(object):
 
     """
 
+    def _execute(self, *args, **kwargs):
+        ns = self.namespace
+        if ns and not os.path.isfile(os.path.join(NETNS_RUN_DIR, ns)):
+            return ""
+        return linux_utils.execute(*args, **kwargs)
+
     def __init__(self, _execute=None, state_less=False,
                  root_helper=None, use_ipv6=False, namespace=None,
                  binary_name=binary_name):
         if _execute:
             self.execute = _execute
         else:
-            self.execute = linux_utils.execute
+            self.execute = self._execute
 
         self.use_ipv6 = use_ipv6
         self.root_helper = root_helper
