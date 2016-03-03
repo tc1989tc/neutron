@@ -238,7 +238,7 @@ class FirewallPlugin(firewall_db.Firewall_db_mixin,
         LOG.debug(_("update_firewall() called"))
         self._ensure_update_firewall(context, id)
         firewall['firewall']['status'] = const.PENDING_UPDATE
-        new_targets = firewall['firewall'].pop(FW_TARGET_ROUTERS)
+        new_targets = firewall['firewall'].pop(FW_TARGET_ROUTERS, None)
         fw = super(FirewallPlugin, self).update_firewall(context, id, firewall)
         if (
             attr.is_attr_set(new_targets) and
