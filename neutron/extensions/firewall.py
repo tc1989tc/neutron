@@ -384,7 +384,8 @@ class Firewall(extensions.ExtensionDescriptor):
         return resource_helper.build_resource_info(plural_mappings,
                                                    RESOURCE_ATTRIBUTE_MAP,
                                                    constants.FIREWALL,
-                                                   action_map=action_map)
+                                                   action_map=action_map,
+                                                   register_quota=True)
 
     @classmethod
     def get_plugin_interface(cls):

@@ -130,17 +130,6 @@ class FirewallAgentApi(n_rpc.RpcProxy):
         )
 
 
-class FirewallCountExceeded(n_exception.Conflict):
-
-    """Reference implementation specific exception for firewall count.
-
-    Only one firewall is supported per tenant. When a second
-    firewall is tried to be created, this exception will be raised.
-    """
-    message = _("Exceeded allowed count of firewalls for tenant "
-                "%(tenant_id)s. Only one firewall is supported per tenant.")
-
-
 class FirewallPlugin(firewall_db.Firewall_db_mixin,
                      targetrouters_db.FirewallTargetRoutersMixin):
 
@@ -220,10 +209,6 @@ class FirewallPlugin(firewall_db.Firewall_db_mixin,
         LOG.debug(_("create_firewall() called"))
         tenant_id = self._get_tenant_id_for_create(context,
                                                    firewall['firewall'])
-        fw_count = self.get_firewalls_count(context,
-                                            filters={'tenant_id': [tenant_id]})
-        if fw_count:
-            raise FirewallCountExceeded(tenant_id=tenant_id)
         fw_target_routers = firewall['firewall'].pop(FW_TARGET_ROUTERS)
         fw = super(FirewallPlugin, self).create_firewall(context, firewall)
         if attr.is_attr_set(fw_target_routers):
