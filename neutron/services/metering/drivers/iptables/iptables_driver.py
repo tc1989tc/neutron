@@ -30,7 +30,7 @@ LOG = logging.getLogger(__name__)
 NS_PREFIX = 'qrouter-'
 WRAP_NAME = 'neutron-meter'
 EXTERNAL_DEV_PREFIX = 'qg-'
-TOP_CHAIN = WRAP_NAME + "-FORWARD"
+TOP_CHAIN = WRAP_NAME + "-local"
 RULE = '-r-'
 LABEL = '-l-'
 
