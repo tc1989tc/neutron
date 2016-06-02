@@ -224,6 +224,8 @@ class MeteringDbMixin(metering.MeteringPluginBase,
             for router in routers:
                 if router_ids and router['id'] not in router_ids:
                     continue
+                if not router['admin_state_up']:
+                    continue
                 router_dict = routers_dict.get(
                     router['id'],
                     self._make_router_dict(router))
