@@ -188,7 +188,8 @@ class MeteringAgent(MeteringPluginRpc, manager.Manager):
         routers = self._get_sync_data_metering(self.context)
 
         routers_on_agent = set(self.routers.keys())
-        routers_on_server = set([router['id'] for router in routers])
+        routers_on_server = set([router['id'] for router in routers]
+                                if routers else [])
 
         for router_id in routers_on_agent - routers_on_server:
             del self.routers[router_id]
