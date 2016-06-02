@@ -261,11 +261,13 @@ class IptablesMeteringDriver(abstract_driver.MeteringAbstractDriver):
     @log.log
     def get_traffic_counters(self, context, routers):
         accs = {}
+        routers_to_reconfigure = []
         for router in routers:
             rm = self.routers.get(router['id'])
             if not rm:
                 continue
 
+            router_to_reconfigure = False
             for label_id, label in rm.metering_labels.items():
                 try:
                     chain = iptables_manager.get_chain_name(WRAP_NAME +
@@ -278,6 +280,7 @@ class IptablesMeteringDriver(abstract_driver.MeteringAbstractDriver):
                 except RuntimeError:
                     LOG.exception(_('Failed to get traffic counters, '
                                     'router: %s'), router)
+                    router_to_reconfigure = True
                     continue
 
                 if not chain_acc:
@@ -289,5 +292,11 @@ class IptablesMeteringDriver(abstract_driver.MeteringAbstractDriver):
                 acc['bytes'] += chain_acc['bytes']
 
                 accs[label_id] = acc
+
+            if router_to_reconfigure:
+                routers_to_reconfigure.append(router['id'])
+
+        for router_id in routers_to_reconfigure:
+            self.routers.pop(router_id, None)
 
         return accs
