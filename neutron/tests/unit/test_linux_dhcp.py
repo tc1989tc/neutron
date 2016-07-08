@@ -753,7 +753,8 @@ class TestDnsmasq(TestBase):
             '--dhcp-hostsfile=/dhcp/%s/host' % network.id,
             '--addn-hosts=/dhcp/%s/addn_hosts' % network.id,
             '--dhcp-optsfile=/dhcp/%s/opts' % network.id,
-            '--leasefile-ro']
+            '--leasefile-ro',
+            '--dhcp-authoritative']
 
         seconds = ''
         if lease_duration == -1:
