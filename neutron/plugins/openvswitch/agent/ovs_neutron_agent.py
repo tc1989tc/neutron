@@ -553,7 +553,7 @@ class OVSNeutronAgent(n_rpc.RpcCallback,
                             dl_vlan=lvid,
                             actions="mod_vlan_vid:%s,normal" % segmentation_id)
                 # inbound
-                self.int_br.add_flow(priority=3,
+                self.int_br.add_flow(priority=4,
                                      in_port=self.
                                      int_ofports[physical_network],
                                      dl_vlan=segmentation_id,
@@ -705,7 +705,7 @@ class OVSNeutronAgent(n_rpc.RpcCallback,
         if cur_tag != DEAD_VLAN_TAG:
             self.int_br.set_db_attribute("Port", port.port_name, "tag",
                                          DEAD_VLAN_TAG)
-            self.int_br.add_flow(priority=2, in_port=port.ofport,
+            self.int_br.add_flow(priority=3, in_port=port.ofport,
                                  actions="drop")
 
     def setup_integration_br(self):
@@ -937,7 +937,7 @@ class OVSNeutronAgent(n_rpc.RpcCallback,
             self.phys_ofports[physical_network] = phys_ofport
 
             # block all untranslated traffic between bridges
-            self.int_br.add_flow(priority=2, in_port=int_ofport,
+            self.int_br.add_flow(priority=3, in_port=int_ofport,
                                  actions="drop")
             br.add_flow(priority=2, in_port=phys_ofport, actions="drop")
 
