@@ -105,7 +105,6 @@ class Member(model_base.BASEV2, models_v2.HasId, models_v2.HasTenant,
     protocol_port = sa.Column(sa.Integer, nullable=False)
     weight = sa.Column(sa.Integer, nullable=False)
     admin_state_up = sa.Column(sa.Boolean(), nullable=False)
-    priority = sa.Column(sa.Integer, nullable=False, default=256)
 
 
 class Pool(model_base.BASEV2, models_v2.HasId, models_v2.HasTenant,
@@ -709,7 +708,6 @@ class LoadBalancerPluginDb(loadbalancer.LoadBalancerPluginBase,
                'protocol_port': member['protocol_port'],
                'weight': member['weight'],
                'admin_state_up': member['admin_state_up'],
-               'priority': member['priority'],
                'status': member['status'],
                'status_description': member['status_description']}
 
@@ -731,9 +729,6 @@ class LoadBalancerPluginDb(loadbalancer.LoadBalancerPluginBase,
                                    weight=v['weight'],
                                    admin_state_up=v['admin_state_up'],
                                    status=constants.PENDING_CREATE)
-                # check if priority is exists
-                if 'priority' in v:
-                    member_db.priority = v['priority']
                 context.session.add(member_db)
                 return self._make_member_dict(member_db)
         except exception.DBDuplicateEntry:
