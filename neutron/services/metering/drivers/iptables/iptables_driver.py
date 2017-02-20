@@ -79,6 +79,9 @@ class RouterWithMetering(object):
             use_ipv6=ipv6_utils.is_enabled())
         self.metering_labels = {}
 
+    def iter_metering_labels(self):
+        return self.metering_labels.items()
+
 
 class IptablesMeteringDriver(abstract_driver.MeteringAbstractDriver):
 
@@ -269,7 +272,7 @@ class IptablesMeteringDriver(abstract_driver.MeteringAbstractDriver):
                 continue
 
             router_to_reconfigure = False
-            for label_id, label in rm.metering_labels.items():
+            for label_id, label in rm.iter_metering_labels():
                 try:
                     chain = iptables_manager.get_chain_name(WRAP_NAME +
                                                             LABEL +
