@@ -119,7 +119,21 @@ class LoadBalancerCallbacks(n_rpc.RpcCallback):
             ]
             retval['driver'] = (
                 self.plugin.drivers[pool.provider.provider_name].device_driver)
-
+            # policy and rules
+            retval['l7policies'] = [
+                {
+                    'policy': self.plugin._make_policy_dict(policy),
+                    'rules': [
+                        self.plugin._make_l7rule_dict(
+                            policy_rule_assoc.rule
+                        )
+                        for policy_rule_assoc in policy.policy_rule_assoc
+                        if policy_rule_assoc.rule.admin_state_up
+                    ]
+                }
+                for policy in pool.policies
+                if policy.admin_state_up
+            ]
             return retval
 
     def pool_deployed(self, context, pool_id):
