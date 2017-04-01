@@ -88,8 +88,12 @@ class LbaasAgentHostingPoolController(wsgi.Controller):
                        "get_%s" % LOADBALANCER_AGENT,
                        {},
                        plugin=lbaas_plugin)
-        return lbaas_plugin.get_lbaas_agent_hosting_pool(
+
+        agent = lbaas_plugin.get_lbaas_agent_hosting_pool(
             request.context, kwargs['pool_id'])
+        if not agent:
+            agent = {'agent': []}
+        return agent
 
 
 class Lbaas_agentscheduler(extensions.ExtensionDescriptor):
