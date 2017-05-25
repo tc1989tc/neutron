@@ -30,6 +30,7 @@ from neutron.db import servicetype_db as st_db
 from neutron.db.vpn import vpn_validator
 from neutron.extensions import vpnaas
 from neutron import manager
+from neutron.notifiers.eayun import eayun_notify
 from neutron.openstack.common import excutils
 from neutron.openstack.common import log as logging
 from neutron.openstack.common import uuidutils
@@ -805,6 +806,7 @@ class VPNPluginRpcDbMixin():
             l3_agent_db.RouterL3AgentBinding.l3_agent_id == agent.id)
         return query
 
+    @eayun_notify(constants.VPN)
     def update_status_by_agent(self, context, service_status_info_list):
         """Updating vpnservice and vpnconnection status.
 
@@ -842,6 +844,7 @@ class VPNPluginRpcDbMixin():
                         context, conn_id, conn['status'],
                         conn['updated_pending_status'])
 
+    @eayun_notify('PPTP')
     def set_vpnservice_status(self, context, vpnservice_id, status):
         with context.session.begin(subtransactions=True):
             try:
@@ -851,6 +854,7 @@ class VPNPluginRpcDbMixin():
                 LOG.warn(_('vpnservice %s in db is already deleted'),
                          vpnservice_db['id'])
 
+    @eayun_notify('PPTP_ports')
     def update_pptp_status_by_agent(
             self, context, host,
             pptp_processes_status, credentials, updated_ports,

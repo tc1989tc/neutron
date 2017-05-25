@@ -24,6 +24,7 @@ from neutron.db.firewall import firewall_db
 from neutron.db.firewall import targetrouters_db
 from neutron.extensions import firewall as fw_ext
 from neutron.extensions.firewall_target_routers import FW_TARGET_ROUTERS
+from neutron.notifiers.eayun import eayun_notify
 from neutron.openstack.common import log as logging
 from neutron.plugins.common import constants as const
 
@@ -38,6 +39,7 @@ class FirewallCallbacks(n_rpc.RpcCallback):
         super(FirewallCallbacks, self).__init__()
         self.plugin = plugin
 
+    @eayun_notify(const.FIREWALL)
     def set_firewall_status(self, context, firewall_id, status, **kwargs):
         """Agent uses this to set a firewall's status."""
         LOG.debug(_("set_firewall_status() called"))
