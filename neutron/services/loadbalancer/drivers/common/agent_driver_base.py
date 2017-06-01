@@ -25,6 +25,7 @@ from neutron.db import agents_db
 from neutron.db.loadbalancer import loadbalancer_db
 from neutron.extensions import lbaas_agentscheduler
 from neutron.extensions import portbindings
+from neutron.notifiers.eayun import eayun_notify
 from neutron.openstack.common import importutils
 from neutron.openstack.common import log as logging
 from neutron.plugins.common import constants
@@ -158,6 +159,7 @@ class LoadBalancerCallbacks(n_rpc.RpcCallback):
                 if hm.status in constants.ACTIVE_PENDING_STATUSES:
                     hm.status = constants.ACTIVE
 
+    @eayun_notify(constants.LOADBALANCER)
     def update_status(self, context, obj_type, obj_id, status):
         model_mapping = {
             'pool': loadbalancer_db.Pool,

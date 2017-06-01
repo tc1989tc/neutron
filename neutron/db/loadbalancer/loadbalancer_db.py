@@ -28,6 +28,7 @@ from neutron.db import servicetype_db as st_db
 from neutron.extensions import loadbalancer
 from neutron.extensions import loadbalancer_l7
 from neutron import manager
+from neutron.notifiers.eayun import eayun_notify
 from neutron.openstack.common import excutils
 from neutron.openstack.common import jsonutils
 from neutron.openstack.common import log as logging
@@ -244,6 +245,7 @@ class LoadBalancerPluginDb(loadbalancer.LoadBalancerPluginBase,
     def _core_plugin(self):
         return manager.NeutronManager.get_plugin()
 
+    @eayun_notify('LB_MEMBER', Member)
     def update_status(self, context, model, id, status,
                       status_description=None):
         with context.session.begin(subtransactions=True):
