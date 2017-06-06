@@ -311,7 +311,7 @@ class IptablesFwaasDriver(fwaas_base.FwaasDriverBase):
         return ''
 
     def _port_arg(self, direction, protocol, port):
-        if not (protocol in ['udp', 'tcp'] and port):
+        if not (protocol in ['udp', 'tcp', 'sctp'] and port):
             return ''
         return '--%s %s' % (direction, port)
 
