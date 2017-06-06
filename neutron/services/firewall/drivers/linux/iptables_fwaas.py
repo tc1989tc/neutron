@@ -39,6 +39,7 @@ IP_VER_TAG = {IPV4: 'v4',
               IPV6: 'v6'}
 
 INTERNAL_DEV_PREFIX = 'qr-'
+EXTERNAL_DEV_PREFIX = 'qg-'
 SNAT_INT_DEV_PREFIX = 'sg-'
 ROUTER_2_FIP_DEV_PREFIX = 'rfp-'
 
@@ -265,6 +266,11 @@ class IptablesFwaasDriver(fwaas_base.FwaasDriverBase):
                         if_prefix, bname, chain_name)]
                     self._add_rules_to_chain(ipt_mgr,
                         ver, 'FORWARD', jump_rule)
+                    if direction == INGRESS_DIRECTION:
+                        jump_rule = ['-i %s+ -j %s-%s' % (
+                            EXTERNAL_DEV_PREFIX, bname, chain_name)]
+                        self._add_rules_to_chain(
+                            ipt_mgr, ver, 'INPUT', jump_rule)
 
         #jump to DROP_ALL policy
         chain_name = iptables_manager.get_chain_name(FWAAS_DEFAULT_CHAIN)
@@ -277,6 +283,11 @@ class IptablesFwaasDriver(fwaas_base.FwaasDriverBase):
         jump_rule = ['-i %s+ -j %s-%s' % (if_prefix, bname, chain_name)]
         self._add_rules_to_chain(ipt_mgr, IPV4, 'FORWARD', jump_rule)
         self._add_rules_to_chain(ipt_mgr, IPV6, 'FORWARD', jump_rule)
+
+        jump_rule = [
+            '-i %s+ -j %s-%s' % (EXTERNAL_DEV_PREFIX, bname, chain_name)]
+        self._add_rules_to_chain(ipt_mgr, IPV4, 'INPUT', jump_rule)
+        self._add_rules_to_chain(ipt_mgr, IPV6, 'INPUT', jump_rule)
 
     def _convert_fwaas_to_iptables_rule(self, rule):
         action = rule.get('action') == 'allow' and 'ACCEPT' or 'DROP'
