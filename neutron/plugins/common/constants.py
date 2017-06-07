@@ -72,6 +72,10 @@ FWAAS_DENY = "deny"
 TCP = "tcp"
 UDP = "udp"
 ICMP = "icmp"
+SCTP = "sctp"
+GRE = "gre"
+ESP = "esp"
+AH = "ah"
 
 # Network Type constants
 TYPE_FLAT = 'flat'
